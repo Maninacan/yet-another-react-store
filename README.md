@@ -3,7 +3,7 @@
 ## The `store` directory
 Create a directory called `store` (or whatever you want) in your `src` directory.
 
-This is where you will create you individual "stores".
+This is where you will create your individual "stores".
 
 For example your `store` directory would contain an `index.js` file that may look something like this:
 
