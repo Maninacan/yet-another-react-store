@@ -1,31 +1,53 @@
-import { Store } from '../storeLib';
-import { getDeckOfCardsApi, drawCardsApi } from '../api/deckOfCardsApi';
+import React from 'react';
+import { drawCardsApi, getDeckOfCardsApi } from '../api/deckOfCardsApi';
 
-export default new Store({
-  deckOfCards: null
-}, (state) => ({
-  getDeckOfCardsStart: () => ({...state, getDeckOfCardsPending: true}),
-  getDeckOfCardsSuccess: (data) => ({...state, deckOfCards: data}),
-  getDeckOfCardsFail: (errorMessage) => ({...state, getDeckOfCardsErrorMessage: errorMessage}),
-  getDeckOfCardsEnd: () => ({...state, getDeckOfCardsPending: false})
-}));
+const DeckOfCardsContext = React.createContext();
 
-const getDeckOfCardsErrorHandler = (methods) => {
-  return (error) => {
-    methods.deckOfCards.getDeckOfCardsFail(error.message);
-    methods.deckOfCards.getDeckOfCardsEnd();
+export class DeckOfCardsProvider extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.getDeckOfCardsStart = () => this.setState((state) => ({...state, getDeckOfCardsPending: true}));
+    this.getDeckOfCardsSuccess = (data) => this.setState((state) => ({...state, deckOfCardsData: data}));
+    this.getDeckOfCardsFail = (errorMessage) => this.setState((state) => ({...state, getDeckOfCardsErrorMessage: errorMessage}));
+    this.getDeckOfCardsEnd = () => this.setState((state) => ({...state, getDeckOfCardsPending: false}));
+
+    this.getDeckOfCardsErrorHandler = () => {
+      return (error) => {
+        this.getDeckOfCardsFail(error.message);
+        this.getDeckOfCardsEnd();
+      }
+    }
+
+    this.getDeckOfCards = () => {
+      this.getDeckOfCardsStart();
+      getDeckOfCardsApi()
+        .then((response) => {
+          return drawCardsApi(response.data.deck_id, 26)
+            .then((response) => {
+              this.getDeckOfCardsSuccess(response.data);
+              this.getDeckOfCardsEnd();
+            })
+            .catch(this.getDeckOfCardsErrorHandler());
+        })
+        .catch(this.getDeckOfCardsErrorHandler());
+    }
+    this.state = {
+      getDeckOfCardsPending: false,
+      deckOfCardsData: null,
+      getDeckOfCardsErrorMessage: null,
+      getDeckOfCards: this.getDeckOfCards
+    };
+  }
+
+  render() {
+    const { children } = this.props;
+    return (
+      <DeckOfCardsContext.Provider value={this.state}>
+        {children}
+      </DeckOfCardsContext.Provider>
+    );
   }
 }
-export const getDeckOfCards = (methods) => {
-  methods.deckOfCards.getDeckOfCardsStart();
-  getDeckOfCardsApi()
-    .then((response) => {
-      return drawCardsApi(response.data.deck_id, 26)
-        .then((response) => {
-          methods.deckOfCards.getDeckOfCardsSuccess(response.data);
-          methods.deckOfCards.getDeckOfCardsEnd();
-        })
-        .catch(getDeckOfCardsErrorHandler(methods));
-    })
-    .catch(getDeckOfCardsErrorHandler(methods));
-}
+
+export const DeckOfCardsConsumer = DeckOfCardsContext.Consumer;

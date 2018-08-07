@@ -1,8 +1,10 @@
 import React from 'react';
 
 import './App.css';
+
 import Header from './components/Header';
 import MainContent from './components/MainContent';
+import SecondaryContent from './components/SecondaryContent';
 
 class App extends React.PureComponent {
   render() {
@@ -10,6 +12,7 @@ class App extends React.PureComponent {
       <div className='App'>
         <Header/>
         <MainContent/>
+        <SecondaryContent/>
       </div>
     );
   }

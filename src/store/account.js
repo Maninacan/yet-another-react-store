@@ -1,24 +1,40 @@
-import { Store } from '../storeLib';
+import React from 'react';
 
-export default new Store(
-  {accountStuff: 'stuff'},
-  (state) => ({
-    changeAccountStuff: (newStuff) => ({...state, accountStuff: newStuff}),
-    fetchDataStart: () => {
-      return ({...state, fetchDataPending: true})
-    },
-    fetchDataSuccess: (data) => ({...state, data}),
-    fetchDataFail: (errorMsg) => ({...state, fetchDataErrorMsg: errorMsg}),
-    fetchDataEnd: () => {
-      return ({...state, fetchDataPending: false})
+const AccountContext = React.createContext();
+
+export class AccountProvider extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.changeAccountStuff = (newStuff) => this.setState((state) => ({...state, accountStuff: newStuff}));
+    this.fetchDataStart = () => this.setState((state) => ({...state, fetchDataPending: true}));
+    this.fetchDataSuccess = (data) => this.setState((state) => ({...state, data}));
+    this.fetchDataFail = (errorMsg) => this.setState((state) => ({...state, fetchDataErrorMsg: errorMsg}));
+    this.fetchDataEnd = () => this.setState((state) => ({...state, fetchDataPending: false}));
+
+    this.fetchData = () => {
+      this.fetchDataStart();
+      setTimeout(() => {
+        this.fetchDataSuccess(Math.random() + '');
+        this.fetchDataEnd();
+      }, 3000);
     }
-  })
-);
+    this.state = {
+      accountStuff: 'stuff',
+      data: null,
+      changeAccountStuff: this.changeAccountStuff,
+      fetchData: this.fetchData
+    };
+  }
 
-export const fetchData = (methods) => {
-  methods.account.fetchDataStart()
-  setTimeout(() => {
-    methods.account.fetchDataSuccess(Math.random() + '')
-    methods.account.fetchDataEnd()
-  }, 3000)
+  render = () => {
+    const { children } = this.props;
+    return (
+      <AccountContext.Provider value={this.state}>
+        {children}
+      </AccountContext.Provider>
+    );
+  }
 }
+
+export const AccountConsumer = AccountContext.Consumer;

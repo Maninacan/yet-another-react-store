@@ -9,44 +9,82 @@ For example your `store` directory would contain an `index.js` file that may loo
 
 ```javascript
 // store/index.js
-import user from './user';
-import account from './account';
+import { combineProviders, combineConsumers, bindStore } from './storeUtils';
 
-export default {
-  user,
-  account
-};
+import { DeckOfCardsProvider, DeckOfCardsConsumer } from './deckOfCards';
+import { UserProvider, UserConsumer } from './user';
+
+export const StoreProvider = combineProviders(DeckOfCardsProvider, UserProvider);
+export const StoreConsumer = combineConsumers(
+  { name: 'deckOfCards', Consumer: DeckOfCardsConsumer },
+  { name: 'user', Consumer: UserConsumer }
+);
+export const connectStore = bindStore(StoreConsumer);
 
 ```
 
-As you can see, the index.js file expects two files also in the `store` directory called `user.js` and `account.js`.
+As you can see, the index.js file expects 3 files also in the `store` directory called `storeUtils.js`, `deckOfCards.js` and `user.js`.
 
-They may each look something like this respectively:
+The `storeUtils.js` file contains 3 helper methods, `combineProviders`, `combineConsumers` and `bindStore`;
+
+The other 2 may each look something like this respectively:
 
 ```javascript
-// store/account.js
-import { Store } from '../storeLib';
+// store/deckOfCards.js
+import React from 'react';
+import { drawCardsApi, getDeckOfCardsApi } from '../api/deckOfCardsApi';
 
-export default new Store(
-  {accountStuff: 'stuff'},
-  (state) => ({
-    changeAccountStuff: (newStuff) => ({...state, accountStuff: newStuff}),
-    fetchDataStart: () => ({...state, fetchDataPending: true}),
-    fetchDataSuccess: (data) => ({...state, data}),
-    fetchDataFail: (errorMsg) => ({...state, fetchDataErrorMsg: errorMsg}),
-    fetchDataEnd: () => ({...state, fetchDataPending: false})
-  })
-);
+const DeckOfCardsContext = React.createContext();
 
-export const fetchData = (methods) => {
-  methods.account.fetchData.start()
-  
-  // The setTimeout is only meant to simulate asynchronous operations.
-  setTimeout(() => {
-    methods.account.fetchData.success('some value')
-    methods.account.fetchData.end()
-  }, 3000)
+export class DeckOfCardsProvider extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.getDeckOfCardsStart = () => this.setState((state) => ({...state, getDeckOfCardsPending: true}));
+    this.getDeckOfCardsSuccess = (data) => this.setState((state) => ({...state, deckOfCardsData: data}));
+    this.getDeckOfCardsFail = (errorMessage) => this.setState((state) => ({...state, getDeckOfCardsErrorMessage: errorMessage}));
+    this.getDeckOfCardsEnd = () => this.setState((state) => ({...state, getDeckOfCardsPending: false}));
+
+    this.getDeckOfCardsErrorHandler = () => {
+      return (error) => {
+        this.getDeckOfCardsFail(error.message);
+        this.getDeckOfCardsEnd();
+      }
+    }
+
+    this.getDeckOfCards = () => {
+      this.getDeckOfCardsStart();
+      getDeckOfCardsApi()
+        .then((response) => {
+          return drawCardsApi(response.data.deck_id, 26)
+            .then((response) => {
+              this.getDeckOfCardsSuccess(response.data);
+              this.getDeckOfCardsEnd();
+            })
+            .catch(this.getDeckOfCardsErrorHandler());
+        })
+        .catch(this.getDeckOfCardsErrorHandler());
+    }
+    this.state = {
+      getDeckOfCardsPending: false,
+      deckOfCardsData: null,
+      getDeckOfCardsErrorMessage: null,
+      getDeckOfCards: this.getDeckOfCards
+    };
+  }
+
+  render() {
+    const { children } = this.props;
+    return (
+      <DeckOfCardsContext.Provider value={this.state}>
+        {children}
+      </DeckOfCardsContext.Provider>
+    );
+  }
 }
+
+export const DeckOfCardsConsumer = DeckOfCardsContext.Consumer;
+
 
 ```
 
@@ -54,25 +92,44 @@ and
 
 ```javascript
 // store/user.js
-import { Store } from '../storeLib';
+import React from 'react';
 
-export default new Store(
-  {email: 'the email', jwt: 'the jwt'},
-  (state) => ({
-    changeEmail: (newEmail) => ({...state, email: newEmail}),
-    updateJwt: (newJwt) => ({...state, jwt: newJwt})
-  })
-);
+const UserContext = React.createContext();
+
+export class UserProvider extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.changeEmail = (newEmail) => this.setState((state) => ({...state, email: newEmail}));
+    this.updateJwt = (newJwt) => this.setState((state) => ({...state, jwt: newJwt}));
+
+    this.state = {
+      email: 'the email',
+      jwt: 'the jwt',
+      changeEmail: this.changeEmail,
+      updateJwt: this.updateJwt
+    };
+  }
+
+  render() {
+    const { children } = this.props;
+    return (
+      <UserContext.Provider value={this.state}>
+        {children}
+      </UserContext.Provider>
+    );
+  }
+}
+
+export const UserConsumer = UserContext.Consumer;
 
 ```
 
-Notice how each file exports as a default a new `Store` instance that expects a `defaultState` as a first parameter (which can be of virtually any type) and `methods` as a second parameter which must be a callback that provides the state and returns an object with methods as props. Since these methods are mechanism we use for changing the state, each of the methods is expected to return the new state (think redux reducer style).
-
-You may also have noticed in the `store/account.js` file that there is a function called fetchData that is being exported.  This will be explained in the section entitled "Asynchronous methods".
+Notice how each file creates a context using `React.createContext();` and exports a `Provider` and a `Consumer`.
 
 ## The store provider
 
-In order for the store to be accessible to the components in your React app you will need to inject the store using the StoreProvider component that can be used to wrap all of your app or only a portion of it.  For the sake of this example we'll assume that we are wrapping the entire app as show in the following example.
+In order for the store to be accessible to the components in your React app you will need to inject the store using the StoreProvider component that can be used to wrap all of your app or only a portion of it.  For the sake of this example we'll assume that we are wrapping the entire app as shown in the following example.
 
 ```javascript
 // src/index.js
@@ -80,11 +137,10 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 
 import App from './App';
-import { StoreProvider } from './storeLib';
-import store from './store/';
+import { StoreProvider } from './store';
 
 ReactDOM.render(
-  <StoreProvider store={store}>
+  <StoreProvider>
     <App/>
   </StoreProvider>,
   document.getElementById('root')
@@ -92,84 +148,153 @@ ReactDOM.render(
 
 ```
 
-As you can see, the `StoreProvider` component is imported from the `storeLib.js` file and the `store` object is imported from the `store/index.js` file we created earlier.  It is then passed into the `StoreProvider` on the `store` property.
+As you can see, the `StoreProvider` component is imported from the `store/index.js` file and wraps the `App` component.
 
 ## Connecting the store to a component
 
-Now that the store is being "provided" to the app.  We'll want a way to gain access to the data in the store as well as the methods we created earlier.  The way to do this is by importing the `connectStore` method from the `storeLib.js` file.
+Now that the store is being "provided" to the app.  We'll want a way to gain access to the data in the store as well as the methods we created earlier.  There are two ways to do this.
 
-Then in the component file, connect the exported component to the store as shown here:
+The first is by importing the `StoreConsumer` component from the `store/index.js` file and use it like this:
 
-```jsx harmony
+```javascript
 // MyComponent.js
 import React from 'react';
-import _ from 'lodash';
 
-import { connectStore } from './storeLib';
-import { fetchData } from './store/account';
+import { StoreConsumer } from './store/';
 
-const MyComponent = (props) => {
+const MyComponent = () => {
   return (
-    <ul>
-      <li><button onClick={() => props.fetchData('25')}>fetch data</button></li>
-      <li>fetchDataPending: {_.get(props, 'account.fetchDataPending') ? 'true' : 'false'}</li>
-      <li>{_.get(props, 'account.data')}</li>
-      <li><button onClick={() => props.changeEmail('new email')}>ChangeEmail</button></li>
-      <li>{props.user.email}</li>
-      <li><button onClick={() => props.updateJwt('new jwt')}>UpdateJwt</button></li>
-      <li>{props.user.jwt}</li>
-      <li><button onClick={() => props.changeAccountStuff('new accountStuff')}>ChangeAccountStuff</button></li>
-      <li>{props.account.accountStuff}</li>
-    </ul>
+    <StoreConsumer>
+      {({account, deckOfCards, user}) => {
+        const { fetchData, fetchDataPending, data, changeAccountStuff, accountStuff } = account;
+        const { getDeckOfCards, getDeckOfCardsPending, deckOfCardsData } = deckOfCards;
+        const { changeEmail, updateJwt, email, jwt } = user;
+        return (
+          <div>
+            <li><button onClick={() => getDeckOfCards()}>get deck of cards</button></li>
+            <li>getDeckOfCardsPending: {getDeckOfCardsPending ? 'true' : 'false'}</li>
+            <li>{deckOfCardsData && JSON.stringify(deckOfCardsData)}</li>
+            <li><button onClick={() => fetchData('25')}>fetch data</button></li>
+            <li>fetchDataPending: {fetchDataPending ? 'true' : 'false'}</li>
+            <li>{data}</li>
+            <li><button onClick={() => changeEmail(Math.random() + '')}>ChangeEmail</button></li>
+            <li>{email}</li>
+            <li><button onClick={() => updateJwt(Math.random() + '')}>UpdateJwt</button></li>
+            <li>{jwt}</li>
+            <li><button onClick={() => changeAccountStuff(Math.random() + '')}>ChangeAccountStuff</button></li>
+            <li>{accountStuff}</li>
+          </div>
+        );
+      }}
+    </StoreConsumer>
   );
-}
+};
 
-const mapStoreToProps = ({user, account}) => {
-  return {user, account}
-}
+export default MyComponent;
 
-const mapMethodsToProps = (methods) => {
+```
+
+The second way is to import the `connectStore` method from the `store/index.js` file and use it like this:
+
+```javascript
+// MyComponent.js
+import React from 'react';
+
+import { connectStore } from './store/';
+
+const MyComponent = ({account, deckOfCards, user}) => {
+  const { fetchData, fetchDataPending, data, changeAccountStuff, accountStuff } = account;
+  const { getDeckOfCards, getDeckOfCardsPending, deckOfCardsData } = deckOfCards;
+  const { changeEmail, updateJwt, email, jwt } = user;
+  return (
+    <div>
+      <li><button onClick={() => getDeckOfCards()}>get deck of cards</button></li>
+      <li>getDeckOfCardsPending: {getDeckOfCardsPending ? 'true' : 'false'}</li>
+      <li>{deckOfCardsData && JSON.stringify(deckOfCardsData)}</li>
+      <li><button onClick={() => fetchData('25')}>fetch data</button></li>
+      <li>fetchDataPending: {fetchDataPending ? 'true' : 'false'}</li>
+      <li>{data}</li>
+      <li><button onClick={() => changeEmail(Math.random() + '')}>ChangeEmail</button></li>
+      <li>{email}</li>
+      <li><button onClick={() => updateJwt(Math.random() + '')}>UpdateJwt</button></li>
+      <li>{jwt}</li>
+      <li><button onClick={() => changeAccountStuff(Math.random() + '')}>ChangeAccountStuff</button></li>
+      <li>{accountStuff}</li>
+    </div>
+  );
+};
+
+const mapStoreToProps = ({account, deckOfCards, user}) => {
   return {
-    changeEmail: methods.user.changeEmail,
-    updateJwt: methods.user.updateJwt,
-    changeAccountStuff: methods.account.changeAccountStuff,
-    fetchData: (...rest) => fetchData(methods, ...rest)
+    account, deckOfCards, user
   }
 }
 
-export default connectStore(mapStoreToProps, mapMethodsToProps)(MyComponent)
+export default connectStore(mapStoreToProps)(MyComponent);
+
 ```
 
-You may have noticed that the `mapMethodsToProps` function returns a `fetchData` method as one of the props on the returned object and that it doesn't follow the same pattern as the other methods.  This is an example of how to call an method that needs to handle asynchronous logic such as making a REST request.  This will be explained in detail in the section entitled "Asynchronous methods".
+You may have noticed that the `mapStoreToProps` callback function is expected if you choose to go the second way.
 
 ## Asynchronous actions
-Sometimes actions need to be performed that are asynchronous. Remember the `store/account.js` file we looked at earlier?  
+Sometimes actions need to be performed that are asynchronous. Remember the `store/deckOfCards.js` file we looked at earlier?
 
 ```javascript
-// store/account.js
-import { Store } from '../storeLib';
+// store/deckOfCards.js
+import React from 'react';
+import { drawCardsApi, getDeckOfCardsApi } from '../api/deckOfCardsApi';
 
-export default new Store(
-  {accountStuff: 'stuff'},
-  (state) => ({
-    changeAccountStuff: (newStuff) => ({...state, accountStuff: newStuff}),
-    fetchDataStart: () => ({...state, fetchDataPending: true}),
-    fetchDataSuccess: (data) => ({...state, data}),
-    fetchDataFail: (errorMsg) => ({...state, fetchDataErrorMsg: errorMsg}),
-    fetchDataEnd: () => ({...state, fetchDataPending: false})
-  })
-);
+const DeckOfCardsContext = React.createContext();
 
-export const fetchData = (methods) => {
-  methods.account.fetchData.start()
-  
-  // The setTimeout is only meant to simulate asynchronous operations.
-  setTimeout(() => {
-    methods.account.fetchData.success('some value')
-    methods.account.fetchData.end()
-  }, 3000)
+export class DeckOfCardsProvider extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.getDeckOfCardsStart = () => this.setState((state) => ({...state, getDeckOfCardsPending: true}));
+    this.getDeckOfCardsSuccess = (data) => this.setState((state) => ({...state, deckOfCardsData: data}));
+    this.getDeckOfCardsFail = (errorMessage) => this.setState((state) => ({...state, getDeckOfCardsErrorMessage: errorMessage}));
+    this.getDeckOfCardsEnd = () => this.setState((state) => ({...state, getDeckOfCardsPending: false}));
+
+    this.getDeckOfCardsErrorHandler = () => {
+      return (error) => {
+        this.getDeckOfCardsFail(error.message);
+        this.getDeckOfCardsEnd();
+      }
+    }
+
+    this.getDeckOfCards = () => {
+      this.getDeckOfCardsStart();
+      getDeckOfCardsApi()
+        .then((response) => {
+          return drawCardsApi(response.data.deck_id, 26)
+            .then((response) => {
+              this.getDeckOfCardsSuccess(response.data);
+              this.getDeckOfCardsEnd();
+            })
+            .catch(this.getDeckOfCardsErrorHandler());
+        })
+        .catch(this.getDeckOfCardsErrorHandler());
+    }
+    this.state = {
+      getDeckOfCardsPending: false,
+      deckOfCardsData: null,
+      getDeckOfCardsErrorMessage: null,
+      getDeckOfCards: this.getDeckOfCards
+    };
+  }
+
+  render() {
+    const { children } = this.props;
+    return (
+      <DeckOfCardsContext.Provider value={this.state}>
+        {children}
+      </DeckOfCardsContext.Provider>
+    );
+  }
 }
+
+export const DeckOfCardsConsumer = DeckOfCardsContext.Consumer;
 
 ```
 
-It contains 4 methods called `fetchDataStart`, `fetchDataSuccess`, `fetchDataFail`, and `fetchDataEnd`.  The `start` and `end` methods are typically used to only toggle a `pending` value.  The `success` method is where the data is received and put on the state and of course the `fail` method is where any error messages are set on the state.  Notice how the `fetchData` method is defined in the `store/account.js` file but is not defined in the `Store` instance.  Rather it has the `methods` prop passed into it in the `mapMethodsToProps` callback defined in the `MyComponent.js` file.
+It contains 5 methods called `getDeckOfCardsStart`, `getDeckOfCardsSuccess`, `getDeckOfCardsFail`, `getDeckOfCardsEnd` and `getDeckOfCards`.  The `start` and `end` methods are typically used to only toggle a `pending` value.  The `success` method is where the data is received and put on the state and of course the `fail` method is where any error messages are set on the state.  Notice how the `getDeckOfCards` method calls the other 4 methods at the appropriate times in async process, and that it is the only method of the 5 that is assigned to the state object.
