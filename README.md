@@ -142,5 +142,34 @@ export default connectStore(mapStoreToProps, mapMethodsToProps)(MyComponent)
 
 You may have noticed that the `mapMethodsToProps` function returns a `fetchData` method as one of the props on the returned object and that it doesn't follow the same pattern as the other methods.  This is an example of how to call an method that needs to handle asynchronous logic such as making a REST request.  This will be explained in detail in the section entitled "Asynchronous methods".
 
-## Asynchronous methods
-Sometimes actions need to be performed that are asynchronous. nRemember the `store/account.js` file we looked at earlier?
+## Asynchronous actions
+Sometimes actions need to be performed that are asynchronous. Remember the `store/account.js` file we looked at earlier?  
+
+```javascript
+// store/account.js
+import { Store } from '../storeLib';
+
+export default new Store(
+  {accountStuff: 'stuff'},
+  (state) => ({
+    changeAccountStuff: (newStuff) => ({...state, accountStuff: newStuff}),
+    fetchDataStart: () => ({...state, fetchDataPending: true}),
+    fetchDataSuccess: (data) => ({...state, data}),
+    fetchDataFail: (errorMsg) => ({...state, fetchDataErrorMsg: errorMsg}),
+    fetchDataEnd: () => ({...state, fetchDataPending: false})
+  })
+);
+
+export const fetchData = (methods) => {
+  methods.account.fetchData.start()
+  
+  // The setTimeout is only meant to simulate asynchronous operations.
+  setTimeout(() => {
+    methods.account.fetchData.success('some value')
+    methods.account.fetchData.end()
+  }, 3000)
+}
+
+```
+
+It contains 4 methods called `fetchDataStart`, `fetchDataSuccess`, `fetchDataFail`, and `fetchDataEnd`.  The `start` and `end` methods are typically used to only toggle a `pending` value.  The `success` method is where the data is received and put on the state and of course the `fail` method is where any error messages are set on the state.  Notice how the `fetchData` method is defined in the `store/account.js` file but is not defined in the `Store` instance.  Rather it has the `methods` prop passed into it in the `mapMethodsToProps` callback defined in the `MyComponent.js` file.
