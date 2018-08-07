@@ -1,4 +1,4 @@
-# Using storeLib.js
+# yet-another-react-store
 
 ## The `store` directory
 Create a directory called `store` (or whatever you want) in your `src` directory.
@@ -31,21 +31,19 @@ export default new Store(
   {accountStuff: 'stuff'},
   (state) => ({
     changeAccountStuff: (newStuff) => ({...state, accountStuff: newStuff}),
-    fetchDataStart: () => {
-      return ({...state, fetchDataPending: true})
-    },
+    fetchDataStart: () => ({...state, fetchDataPending: true}),
     fetchDataSuccess: (data) => ({...state, data}),
     fetchDataFail: (errorMsg) => ({...state, fetchDataErrorMsg: errorMsg}),
-    fetchDataEnd: () => {
-      return ({...state, fetchDataPending: false})
-    }
+    fetchDataEnd: () => ({...state, fetchDataPending: false})
   })
 );
 
 export const fetchData = (methods) => {
   methods.account.fetchData.start()
+  
+  // The setTimeout is only meant to simulate asynchronous operations.
   setTimeout(() => {
-    methods.account.fetchData.success(Math.random() + '')
+    methods.account.fetchData.success('some value')
     methods.account.fetchData.end()
   }, 3000)
 }
@@ -70,7 +68,7 @@ export default new Store(
 
 Notice how each file exports as a default a new `Store` instance that expects a `defaultState` as a first parameter (which can be of virtually any type) and `methods` as a second parameter which must be a callback that provides the state and returns an object with methods as props. Since these methods are mechanism we use for changing the state, each of the methods is expected to return the new state (think redux reducer style).
 
-You may also have noticed in the `store/account.js` file that there is a function called fetchData that is being exported.  This will be explained in the section entitled "Asynchronous methods and the `asyncAction` function".
+You may also have noticed in the `store/account.js` file that there is a function called fetchData that is being exported.  This will be explained in the section entitled "Asynchronous methods".
 
 ## The store provider
 
@@ -142,35 +140,7 @@ const mapMethodsToProps = (methods) => {
 export default connectStore(mapStoreToProps, mapMethodsToProps)(MyComponent)
 ```
 
-You may have noticed that the `mapMethodsToProps` function returns a `fetchData` method as one of the props on the returned object and that it doesn't follow the same pattern as the other methods.  This is an example of how to call an method that needs to handle asynchronous logic such as making a REST request.  This will be explained in detail in the section entitled "Asynchronous methods and the `asyncAction` function".
+You may have noticed that the `mapMethodsToProps` function returns a `fetchData` method as one of the props on the returned object and that it doesn't follow the same pattern as the other methods.  This is an example of how to call an method that needs to handle asynchronous logic such as making a REST request.  This will be explained in detail in the section entitled "Asynchronous methods".
 
-## Asynchronous methods and the `asyncAction` function
-Sometimes actions need to be performed that are asynchronous.  There is a helper method in the `storeLib` file called `asyncAction`.  Remember the `store/account.js` file we looked at earlier?
-
-```javascript
-// store/account.js
-import { Store, asyncAction } from '../storeLib';
-
-export default new Store(
-  {accountStuff: 'stuff'},
-  (state) => ({
-    changeAccountStuff: (newStuff) => ({...state, accountStuff: newStuff}),
-    fetchData: asyncAction('fetchData',
-      (data) => ({...state, data}),
-      (errorMsg) => ({...state, fetchDataErrorMsg: errorMsg})
-    )(state)
-  })
-);
-
-export const fetchData = (methods) => {
-  methods.account.fetchData.start()
-  setTimeout(() => {
-    methods.account.fetchData.success(Math.random() + '')
-    methods.account.fetchData.end()
-  }, 3000)
-}
-
-```
-
-Notice the use of the `asyncAction` method. This generates and returns an object with 4 methods called `start`, `success`, `fail`, and `end`.  The params expected by the `asyncAction` method are the `actionName`, `successCB` and `failCB`.  The `start` and `end` methods simply set the `fetchDataPending` state to `true` or `false`
-# yet-another-react-store
+## Asynchronous methods
+Sometimes actions need to be performed that are asynchronous. nRemember the `store/account.js` file we looked at earlier?
